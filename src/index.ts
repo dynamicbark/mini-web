@@ -76,7 +76,7 @@ expressApp.use((_req, res) => {
 });
 
 try {
-  expressApp.listen(process.env.WEB_PORT, () => {
+  expressApp.listen(parseInt(process.env.WEB_PORT!, 10), `${process.env.WEB_HOST}`, () => {
     console.log('Web server is listening.');
   });
 } catch (e) {
