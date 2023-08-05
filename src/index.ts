@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { Request } from 'express';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'fs';
 import path from 'path';
 
@@ -18,17 +18,8 @@ setInterval(() => {
     .map((dirent) => dirent.name);
 }, 15 * 1000);
 
-// Check if the site is found locally
-expressApp.use((req, res, next) => {
-  if (!availableSites.includes(req.hostname)) {
-    res.status(404).setHeader('content-type', 'text/plain').send(`404: Not Found - unknown site: ${req.hostname}`);
-    return;
-  }
-  next();
-});
-
-// Send information to plausible async
-expressApp.use((req, _res, next) => {
+// Send request information to Plausible
+function sendRequestToPlausible(req: Request) {
   setImmediate(async () => {
     try {
       // @ts-ignore
@@ -50,6 +41,14 @@ expressApp.use((req, _res, next) => {
       console.error(e);
     }
   });
+}
+
+// Check if the site is found locally
+expressApp.use((req, res, next) => {
+  if (!availableSites.includes(req.hostname)) {
+    res.status(404).setHeader('content-type', 'text/plain').send(`404: Not Found - unknown site: ${req.hostname}`);
+    return;
+  }
   next();
 });
 
@@ -58,6 +57,14 @@ expressApp.use((req, res, next) => {
   express.static(path.join('sites', req.hostname), {
     extensions: ['html', 'txt'],
     index: ['index.html', 'index.txt'],
+    setHeaders: (_res, filePath, stat) => {
+      if (!stat || !stat.isFile()) {
+        return;
+      }
+      if (['.html', '.txt'].includes(path.extname(filePath))) {
+        sendRequestToPlausible(req);
+      }
+    },
   })(req, res, next);
 });
 
@@ -65,6 +72,7 @@ expressApp.use((req, res, next) => {
 expressApp.use((req, res, next) => {
   const redirectFilePath = path.join('sites', req.hostname, '_redirects', req.path);
   if (existsSync(redirectFilePath) && !lstatSync(redirectFilePath).isDirectory()) {
+    sendRequestToPlausible(req);
     return res.redirect(readFileSync(redirectFilePath).toString().trim());
   }
   next();
